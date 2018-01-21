@@ -1,29 +1,26 @@
-var pm2 = require('pm2');
-var os = require('os');
-var request = require('request');
+const pmx = require('pmx');
+const pm2 = require('pm2');
+const os = require('os');
+const request = require('request');
 
 // Version needs to be outside the config file
-var ver = '1.1.0';
-
-// Plugin Variables
-var config = require('./config.json');
-var license = config.nrlicense;
-var guid = config.nrguid;
-var url = config.nrurl;
-
+const ver = require('./package.json').version;
+const guid = "com.sealights.pm2plugin";
+var duration = 30;
 // Running restart 
 var restartList = {};
 
-function poll()
+function poll(conf)
 {
 	// Connect or launch pm2
 	pm2.connect(function(err){
-
-		console.log('Just connected to PM2');
+		if(err) {
+			console.error('Error connecting to pm2', err);
+			return;
+		}
 
 		// Pull down the list
 		pm2.list(function(err, list) {
-
 			// Start an output message
 			var msg = {};
 
@@ -40,7 +37,7 @@ function poll()
 			components[0] = {};
 			components[0].name = os.hostname();
 			components[0].guid = guid;
-			components[0].duration = 30;
+			components[0].duration = duration;
 
 			// Create the metrics subsection
 			var metrics = {};
@@ -130,27 +127,35 @@ function poll()
 			metrics['Component/rollup/all[intervalRestarts]'] = totalIntervalRestarts;
 	
 			// console.log(msg.components[0]);
-			postToNewRelic(msg);
-
-			// Disconnect from PM2
-			pm2.disconnect();
+			var timeStart = new Date().valueOf();
+			postToNewRelic(msg, conf, function(){
+				// Disconnect from PM2
+				pm2.disconnect();
+				var timeEnd = new Date().valueOf();
+				var submissionTime = (timeEnd-timeStart);
+				var wait = (duration*1000) - submissionTime; //Subtract submission time from the desired interval
+				if (wait<0) wait = 0;
+				// Re-run every duration (30s)
+				setTimeout(function() {
+					poll(conf);
+				}, wait);
+			});			
 		});
 	});
-
-	// Re-run every 30s
-	setTimeout(poll, 30000)
 }
 
-function postToNewRelic(msg) {
+function postToNewRelic(msg, conf, callback) {
+	console.log('postToNewRelic');
+	if (!conf.nrlicense) { console.log('no license, not sending'); return callback(null); }
 	var msgString = JSON.stringify(msg);
 	// console.log(msg.components[0].metrics);
 	request({
-		url: url,
+		url: "https://platform-api.newrelic.com/platform/v1/metrics",
 		method: "POST",
 		headers: {
 			'Content-Type': 'application/json',
 			'Accept': 'application/json',
-			'X-License-Key': license
+			'X-License-Key': conf.nrlicense
 		},
 		body: msgString
 	}, function (err, httpResponse, body) {
@@ -159,9 +164,11 @@ function postToNewRelic(msg) {
 			if(body) {
 				console.log('Response from NR: ' + body);
 			}
+			callback(null);
 		} else {
 			console.log('*** ERROR ***');
 			console.log(err);
+			callback(err);
 		}
 	});
 	// console.log('Just posted to New Relic: %s', msgString);
@@ -173,4 +180,10 @@ function calcUptime(date) {
 }
 
 console.log('Starting PM2 Plugin version: ' + ver);
-poll();
+pmx.initModule({}, function(err, conf) {
+	conf = conf.module_conf;
+	if (!conf.nrlicense) {
+		console.error('nrlicense is not configured. Plugin is disabled');	
+	}
+	poll(conf);
+});

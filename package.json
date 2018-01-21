@@ -1,8 +1,8 @@
 {
-  "name": "pm2plugin",
-  "version": "1.1.0",
+  "name": "pm2-newrelic-plugin",
+  "version": "2.1.0",
   "description": "New Relic plugin to pull in data from PM2",
-  "main": "app.js",
+  "main": "pm2plugin.js",
   "repository": "https://github.com/kenahrens/newrelic-pm2-plugin",
   "scripts": {
     "test": "./node_modules/mocha/bin/mocha"
@@ -10,7 +10,8 @@
   "author": "kahrens",
   "license": "MIT",
   "dependencies": {
-    "pm2": "^0.12.5",
+    "pm2": "*",
+    "pmx": "latest",
     "request": "^2.53.0"
   },
   "devDependencies": {

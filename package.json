@@ -3,7 +3,7 @@
   "version": "2.1.0",
   "description": "New Relic plugin to pull in data from PM2",
   "main": "pm2plugin.js",
-  "repository": "https://github.com/kenahrens/newrelic-pm2-plugin",
+  "repository": "https://github.com/Sealights/newrelic-pm2-plugin",
   "scripts": {
     "test": "./node_modules/mocha/bin/mocha"
   },

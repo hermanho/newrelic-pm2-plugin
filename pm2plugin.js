@@ -145,7 +145,6 @@ function poll(conf)
 }
 
 function postToNewRelic(msg, conf, callback) {
-	console.log('postToNewRelic');
 	if (!conf.nrlicense) { console.log('no license, not sending'); return callback(null); }
 	var msgString = JSON.stringify(msg);
 	// console.log(msg.components[0].metrics);

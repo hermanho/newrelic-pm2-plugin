@@ -1,9 +1,9 @@
 {
-  "name": "@hermanho/pm2-newrelic-plugin",
+  "name": "@hermanho/newrelic-pm2-plugin",
   "version": "2.2.0",
   "description": "New Relic plugin to pull in data from PM2",
   "main": "pm2plugin.js",
-  "repository": "https://github.com/Sealights/newrelic-pm2-plugin",
+  "repository": "https://github.com/hermanho/newrelic-pm2-plugin.git",
   "scripts": {
     "test": "./node_modules/mocha/bin/mocha"
   },

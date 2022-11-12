@@ -145,26 +145,27 @@ function poll(conf)
 }
 
 function postToNewRelic(msg, conf, callback) {
-	if (!conf.nrlicense) { console.log('no license, not sending'); return callback(null); }
+	if (!conf.nrlicense) { console.log((new Date()).toLocaleString('en-GB') + ' no license, not sending'); return callback(null); }
 	var msgString = JSON.stringify(msg);
 	// console.log(msg.components[0].metrics);
 	request({
-		url: "https://platform-api.newrelic.com/platform/v1/metrics",
+		url: "https://metric-api.eu.newrelic.com/metric/v1",
 		method: "POST",
 		headers: {
 			'Content-Type': 'application/json',
 			'Accept': 'application/json',
-			'X-License-Key': conf.nrlicense
+			'Api-Key': conf.nrlicense
 		},
 		body: msgString
 	}, function (err, httpResponse, body) {
 		if (!err) {
-			console.log('New Relic Reponse: %d', httpResponse.statusCode);
+			console.log((new Date()).toLocaleString('en-GB') + ' New Relic Reponse: %d', httpResponse.statusCode);
 			if(body) {
-				console.log('Response from NR: ' + body);
+				console.log((new Date()).toLocaleString('en-GB') + ' Response from NR: ' + body);
 			}
 			callback(null);
 		} else {
+			console.log((new Date()).toLocaleString('en-GB'));
 			console.log('*** ERROR ***');
 			console.log(err);
 			callback(err);
@@ -178,11 +179,11 @@ function calcUptime(date) {
 	return seconds;
 }
 
-console.log('Starting PM2 Plugin version: ' + ver);
+console.log((new Date()).toLocaleString('en-GB') + ' Starting PM2 Plugin version: ' + ver);
 pmx.initModule({}, function(err, conf) {
 	conf = conf.module_conf;
 	if (!conf.nrlicense) {
-		console.error('nrlicense is not configured. Plugin is disabled');	
+		console.error((new Date()).toLocaleString('en-GB') + ' nrlicense is not configured. Plugin is disabled');	
 	}
 	poll(conf);
 });

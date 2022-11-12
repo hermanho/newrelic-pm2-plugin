@@ -23,6 +23,7 @@ function poll(conf)
 		pm2.list(function(err, list) {
 			// Start an output message
 			var msg = {};
+			msg.timestamp = Math.floor(Date.now() / 1000);
 
 			// Create the agent subsection
 			var agent = {};

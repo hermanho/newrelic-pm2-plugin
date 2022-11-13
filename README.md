@@ -1,5 +1,5 @@
 # newrelic-pm2-plugin
-[![Build Status](https://travis-ci.org/hermanho/newrelic-pm2-plugin.svg?branch=master)](https://travis-ci.org/hermanho/newrelic-pm2-plugin)
+[![Build Status](https://app.travis-ci.com/hermanho/newrelic-pm2-plugin.svg?branch=master)](https://app.travis-ci.com/hermanho/newrelic-pm2-plugin)
 This plugin will pull data from PM2 and publish to New Relic as a plugin
 
 # Installation instructions

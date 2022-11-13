@@ -226,14 +226,14 @@ pmx.initModule({}, function (_err, conf) {
   }
   metricClient = new MetricClient({
     apiKey: conf.nrlicense,
-    host: conf.eu ? 'https://metric-api.eu.newrelic.com/metric/v1' : null
+    host: conf.eu ? 'metric-api.eu.newrelic.com' : null
   });
   metricClient.addVersionInfo('newrelic-pm2-plugin', ver);
   poll(conf);
 
   logClient = new LogClient({
     apiKey: conf.nrlicense,
-    host: conf.eu ? 'https://metric-api.eu.newrelic.com/metric/v1' : null
+    host: conf.eu ? 'log-api.eu.newrelic.com' : null
   });
   pm2.Client.launchBus(function (err, bus) {
     if (err) return console.error('PM2 Loggly:', err);

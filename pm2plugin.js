@@ -1,190 +1,248 @@
 const pmx = require('pmx');
 const pm2 = require('pm2');
 const os = require('os');
-const request = require('request');
+const telemetry = require('@newrelic/telemetry-sdk').telemetry;
+const { MetricBatch, GaugeMetric, CountMetric, MetricClient } = telemetry.metrics;
+const { LogBatch, Log, LogClient } = telemetry.logs;
 
 // Version needs to be outside the config file
 const ver = require('./package.json').version;
-const guid = "com.sealights.pm2plugin";
-var duration = 30;
-// Running restart 
-var restartList = {};
+const duration = 30;
+// Running restart
+const restartList = {};
 
-function poll(conf)
-{
-	// Connect or launch pm2
-	pm2.connect(function(err){
-		if(err) {
-			console.error('Error connecting to pm2', err);
-			return;
-		}
-
-		// Pull down the list
-		pm2.list(function(err, list) {
-			// Start an output message
-			var msg = {};
-			msg.timestamp = Math.floor(Date.now() / 1000);
-
-			// Create the agent subsection
-			var agent = {};
-			msg.agent = agent;
-			agent.host = os.hostname();
-			agent.pid = process.pid;
-			agent.version = ver;
-
-			// Create the components array (with only 1 value)
-			var components = [];
-			msg.components = components;
-			components[0] = {};
-			components[0].name = os.hostname();
-			components[0].guid = guid;
-			components[0].duration = duration;
-
-			// Create the metrics subsection
-			var metrics = {};
-			components[0].metrics = metrics;
-
-			// Process Totals
-			var processArr = {};
-
-			// PM2 Totals
-			var totalUptime = 0;
-			var totalRestarts = 0;
-			var totalCpu = 0;
-			var totalMemory = 0;
-			var totalIntervalRestarts = 0;
-
-			// Pull down data for each function
-			list.forEach(function(proc) {
-
-				// Get the metrics
-				var processPid = proc.pm_id;
-				var processName = proc.pm2_env.name;
-				var processUptime = calcUptime(proc.pm2_env.pm_uptime);
-				var processTotalRestarts = proc.pm2_env.restart_time;
-				var processCpu = proc.monit.cpu;
-				var processMemory = proc.monit.memory;
-
-				// Calculate per interval restarts
-				var processPreviousRestarts = restartList[processName] || 0;
-				var processIntervalRestarts = processTotalRestarts - processPreviousRestarts;
-				restartList[processName] = processTotalRestarts;
-
-				// Store the metrics
-				var namePrefix = 'Component/id/' + processPid + '/' + processName;
-				metrics[namePrefix + '[uptime]'] = processUptime;
-				metrics[namePrefix + '[restarts]'] = processTotalRestarts;
-				metrics[namePrefix + '[cpu]'] = processCpu;
-				metrics[namePrefix + '[memory]'] = processMemory;
-				metrics[namePrefix + '[intervalRestarts]'] = processIntervalRestarts;
-
-				// Increment the Process totals
-				var currentProcess = processArr[processName];
-				if (currentProcess != null) {
-					currentProcess.count++;
-					currentProcess.uptime += processUptime;
-					currentProcess.totalRestarts += processTotalRestarts;
-					currentProcess.cpu += processCpu;
-					currentProcess.memory += processMemory;
-					currentProcess.intervalRestarts += processIntervalRestarts;
-					processArr[processName] = currentProcess;
-				} else {
-					// Initialize the data for this process
-					processArr[processName] = {
-						'count': 1,
-						'uptime': processUptime,
-						'totalRestarts': processTotalRestarts,
-						'cpu': processCpu,
-						'memory': processMemory,
-						'intervalRestarts': processIntervalRestarts
-					}
-				}
-
-				// Increment the PM2 totals
-				totalUptime += processUptime;
-				totalRestarts += processTotalRestarts;
-				totalCpu += processCpu;
-				totalMemory += processMemory;
-				totalIntervalRestarts += processIntervalRestarts;
-			});
-
-			// Create the Process rollup metrics
-			for (var processName in processArr) {
-				var currentProcess = processArr[processName];
-				var namePrefix = 'Component/process/' + processName;
-				metrics[namePrefix + '[count]'] = currentProcess.count;
-				metrics[namePrefix + '[uptime]'] = currentProcess.uptime;
-				metrics[namePrefix + '[restarts]'] = currentProcess.totalRestarts;
-				metrics[namePrefix + '[cpu]'] = currentProcess.cpu;
-				metrics[namePrefix + '[memory]'] = currentProcess.memory;
-				metrics[namePrefix + '[intervalRestarts]'] = currentProcess.intervalRestarts;
-			}
-
-			// Create the PM2 rollup metrics
-			metrics['Component/rollup/all[uptime]'] = totalUptime;
-			metrics['Component/rollup/all[restarts]'] = totalRestarts;
-			metrics['Component/rollup/all[cpu]'] = totalCpu;
-			metrics['Component/rollup/all[memory]'] = totalMemory;
-			metrics['Component/rollup/all[intervalRestarts]'] = totalIntervalRestarts;
-	
-			// console.log(msg.components[0]);
-			var timeStart = new Date().valueOf();
-			postToNewRelic(msg, conf, function(){
-				// Disconnect from PM2
-				pm2.disconnect();
-				var timeEnd = new Date().valueOf();
-				var submissionTime = (timeEnd-timeStart);
-				var wait = (duration*1000) - submissionTime; //Subtract submission time from the desired interval
-				if (wait<0) wait = 0;
-				// Re-run every duration (30s)
-				setTimeout(function() {
-					poll(conf);
-				}, wait);
-			});			
-		});
-	});
+/**
+ *
+ * @param {Date} date
+ * @returns
+ */
+function calcUptime (date) {
+  const seconds = Math.floor((new Date() - date) / 1000);
+  return seconds;
 }
 
-function postToNewRelic(msg, conf, callback) {
-	if (!conf.nrlicense) { console.log((new Date()).toLocaleString('en-GB') + ' no license, not sending'); return callback(null); }
-	var msgString = JSON.stringify(msg);
-	// console.log(msg.components[0].metrics);
-	request({
-		url: "https://metric-api.eu.newrelic.com/metric/v1",
-		method: "POST",
-		headers: {
-			'Content-Type': 'application/json',
-			'Accept': 'application/json',
-			'Api-Key': conf.nrlicense
-		},
-		body: msgString
-	}, function (err, httpResponse, body) {
-		if (!err) {
-			console.log((new Date()).toLocaleString('en-GB') + ' New Relic Reponse: %d', httpResponse.statusCode);
-			if(body) {
-				console.log((new Date()).toLocaleString('en-GB') + ' Response from NR: ' + body);
-			}
-			callback(null);
-		} else {
-			console.log((new Date()).toLocaleString('en-GB'));
-			console.log('*** ERROR ***');
-			console.log(err);
-			callback(err);
-		}
-	});
-	// console.log('Just posted to New Relic: %s', msgString);
+function poll (conf) {
+  // Connect or launch pm2
+  pm2.connect(function (err) {
+    if (err) {
+      console.error('Error connecting to pm2', err);
+      return;
+    }
+
+    // Pull down the list
+    pm2.list(function (_err, list) {
+      /**
+       * Create the metrics subsection
+       * @type {telemetry.metrics.Metric[]}
+       */
+      const metrics = [];
+
+      // PM2 Totals
+      let totalUptime = 0;
+      let totalRestarts = 0;
+      let totalCpu = 0;
+      let totalMemory = 0;
+      let totalIntervalRestarts = 0;
+
+      // Pull down data for each function
+      list.forEach(function (proc) {
+        // Get the metric
+        const processPid = proc.pm_id;
+        const processName = proc.pm2_env.name;
+        const processUptime = calcUptime(proc.pm2_env.pm_uptime);
+        const processTotalRestarts = proc.pm2_env.restart_time;
+        const processCpu = proc.monit.cpu;
+        const processMemory = proc.monit.memory;
+
+        // Calculate per interval restarts
+        const processPreviousRestarts = restartList[processName] || 0;
+        const processIntervalRestarts = processTotalRestarts - processPreviousRestarts;
+        restartList[processName] = processTotalRestarts;
+
+        // Store the metric
+        const namePrefix = 'Component/id/' + processPid + '/' + processName;
+        let metric = new GaugeMetric();
+        metrics.push(metric);
+        metric.name = namePrefix + '[uptime]';
+        metric.value = processUptime;
+
+        metric = new CountMetric();
+        metrics.push(metric);
+        metric.name = namePrefix + '[restarts]';
+        metric.value = processTotalRestarts;
+
+        metric = new GaugeMetric();
+        metrics.push(metric);
+        metric.name = namePrefix + '[cpu]';
+        metric.value = processCpu;
+
+        metric = new GaugeMetric();
+        metrics.push(metric);
+        metric.name = namePrefix + '[memory]';
+        metric.value = processMemory;
+
+        metric = new GaugeMetric();
+        metrics.push(metric);
+        metric.name = namePrefix + '[intervalRestarts]';
+        metric.value = processIntervalRestarts;
+
+        // Increment the PM2 totals
+        totalUptime += processUptime;
+        totalRestarts += processTotalRestarts;
+        totalCpu += processCpu;
+        totalMemory += processMemory;
+        totalIntervalRestarts += processIntervalRestarts;
+      });
+
+      let metric = new GaugeMetric();
+      metrics.push(metric);
+      metric.name = 'Component/rollup/all[uptime]';
+      metric.value = totalUptime;
+
+      metric = new CountMetric();
+      metrics.push(metric);
+      metric.name = 'Component/rollup/all[restarts]';
+      metric.value = totalRestarts;
+
+      metric = new GaugeMetric();
+      metrics.push(metric);
+      metric.name = 'Component/rollup/all[cpu]';
+      metric.value = totalCpu;
+
+      metric = new GaugeMetric();
+      metrics.push(metric);
+      metric.name = 'Component/rollup/all[memory]';
+      metric.value = totalMemory;
+
+      metric = new GaugeMetric();
+      metrics.push(metric);
+      metric.name = 'Component/rollup/all[intervalRestarts]';
+      metric.value = totalIntervalRestarts;
+
+      // console.log(msg.components[0]);
+      const timeStart = new Date().valueOf();
+      postToNewRelicMetric(metrics, conf, function () {
+        // Disconnect from PM2
+        pm2.disconnect();
+        const timeEnd = new Date().valueOf();
+        const submissionTime = (timeEnd - timeStart);
+        let wait = (duration * 1000) - submissionTime; // Subtract submission time from the desired interval
+        if (wait < 0) wait = 0;
+        // Re-run every duration (30s)
+        setTimeout(function () {
+          poll(conf);
+        }, wait);
+      });
+    });
+  });
 }
 
-function calcUptime(date) {
-	var seconds = Math.floor((new Date() - date) / 1000);
-	return seconds;
+/**
+ * @type {telemetry.metrics.MetricClient}
+ */
+let metricClient;
+
+/**
+ * @type {telemetry.logs.LogClient}
+ */
+let logClient;
+
+/**
+ *
+ * @param {telemetry.metrics.Metric[]} metrics
+ * @param {Function} callback
+ * @returns
+ */
+function postToNewRelicMetric (metrics, conf, callback) {
+  if (!conf.nrlicense) { console.log((new Date()).toLocaleString('en-GB') + ' no license, not sending'); return callback(null); }
+
+  const attributes = {};
+  attributes.host = os.hostname();
+  attributes.pid = process.pid;
+  attributes.pluginVersion = ver;
+  attributes.osName = os.hostname();
+
+  const batch = new MetricBatch(
+    attributes,
+    Math.floor(Date.now() / 1000), // timestamp
+    1000, // interval -- how offten we're sending this data in milliseconds
+    metrics
+  );
+
+  metricClient.send(batch, function (err, res, body) {
+    console.log(res.statusCode);
+    if (!err) {
+      console.log((new Date()).toLocaleString('en-GB') + ' New Relic Reponse: %d', res.statusCode);
+      if (body) {
+        console.log((new Date()).toLocaleString('en-GB') + ' Response from NR: ' + body);
+      }
+      callback(null);
+    } else {
+      console.log((new Date()).toLocaleString('en-GB'));
+      console.log('*** ERROR ***');
+      console.log(err);
+      callback(err);
+    }
+  });
+}
+
+/**
+ *
+ * @param {'info' | 'error'} logType
+ * @param {string} callback
+ * @returns
+ */
+function postToNewRelicLog (logType, message) {
+  const attributes = {};
+  attributes.host = os.hostname();
+  attributes.pid = process.pid;
+  attributes.pluginVersion = ver;
+  attributes.osName = os.hostname();
+
+  const logMessage = new Log(message, Math.floor(Date.now() / 1000), { logType });
+  const batch = new LogBatch([logMessage], attributes);
+  logClient.send(batch);
 }
 
 console.log((new Date()).toLocaleString('en-GB') + ' Starting PM2 Plugin version: ' + ver);
-pmx.initModule({}, function(err, conf) {
-	conf = conf.module_conf;
-	if (!conf.nrlicense) {
-		console.error((new Date()).toLocaleString('en-GB') + ' nrlicense is not configured. Plugin is disabled');	
-	}
-	poll(conf);
+pmx.initModule({}, function (_err, conf) {
+  conf = conf.module_conf;
+  if (!conf.nrlicense) {
+    console.error((new Date()).toLocaleString('en-GB') + ' nrlicense is not configured. Plugin is disabled');
+  }
+  metricClient = new MetricClient({
+    apiKey: conf.nrlicense,
+    host: conf.eu ? 'https://metric-api.eu.newrelic.com/metric/v1' : null
+  });
+  metricClient.addVersionInfo('newrelic-pm2-plugin', ver);
+  poll(conf);
+
+  logClient = new LogClient({
+    apiKey: conf.nrlicense,
+    host: conf.eu ? 'https://metric-api.eu.newrelic.com/metric/v1' : null
+  });
+  pm2.Client.launchBus(function (err, bus) {
+    if (err) return console.error('PM2 Loggly:', err);
+
+    bus.on('log:out', function (log) {
+      if (log.process.name !== 'pm2-gelf') {
+        postToNewRelicLog('info', log);
+      }
+    });
+
+    bus.on('log:err', function (log) {
+      if (log.process.name !== 'pm2-gelf') {
+        postToNewRelicLog('error', log);
+      }
+    });
+
+    bus.on('reconnect attempt', function () {
+      console.log((new Date()).toLocaleString('en-GB') + ' Bus reconnecting');
+    });
+
+    bus.on('close', function () {
+      console.log((new Date()).toLocaleString('en-GB') + ' Bus closed');
+      pm2.disconnectBus();
+    });
+  });
 });

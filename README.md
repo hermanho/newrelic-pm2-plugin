@@ -4,8 +4,8 @@ This plugin will pull data from PM2 and publish to New Relic as a plugin
 
 # Installation instructions
 Need to install the dependencies and setup the config
-- Run ```pm2 install pm2-newrelic-plugin``` 
-- Run ```pm2 config pm2-newrelic-plugin:nrlicense [YOUR NEWRELIC LICENSE KEY]```
+- Run ```pm2 install eu01xxe05ce2d8be07a1be976e118df3FFFFNRAL``` 
+- Run ```pm2 config newrelic-pm2-plugin:nrlicense [YOUR NEWRELIC LICENSE KEY]```
 - Data should show up under pm2plugin in your New Relic account
 
 ![PM2 Dashboard](/images/pm2-plugin-home.jpg)

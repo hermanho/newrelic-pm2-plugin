@@ -170,18 +170,18 @@ function postToNewRelicMetric (metrics, conf, callback) {
   );
 
   metricClient.send(batch, function (err, res, body) {
-    console.log(res.statusCode);
     if (!err) {
-      console.log((new Date()).toLocaleString('en-GB') + ' New Relic Reponse: %d', res.statusCode);
+      console.log((new Date()).toLocaleString('en-GB') + ' New Relic Metric Reponse: %d', res.statusCode);
       if (body) {
-        console.log((new Date()).toLocaleString('en-GB') + ' Response from NR: ' + body);
+        console.log((new Date()).toLocaleString('en-GB') + ' Response from NR Metric: ' + body);
       }
-      callback(null);
+      callback && callback(null);
     } else {
       console.log((new Date()).toLocaleString('en-GB'));
       console.log('*** ERROR ***');
+      console.log('*** metricClient.send ***');
       console.log(err);
-      callback(err);
+      callback && callback(err);
     }
   });
 }
@@ -192,7 +192,7 @@ function postToNewRelicMetric (metrics, conf, callback) {
  * @param {string} callback
  * @returns
  */
-function postToNewRelicLog (logType, message) {
+function postToNewRelicLog (logType, message, callback) {
   const attributes = {};
   attributes.host = os.hostname();
   attributes.pid = process.pid;
@@ -201,7 +201,21 @@ function postToNewRelicLog (logType, message) {
 
   const logMessage = new Log(message, Math.floor(Date.now() / 1000), { logType });
   const batch = new LogBatch([logMessage], attributes);
-  logClient.send(batch);
+  logClient.send(batch, function (err, res, body) {
+    if (!err) {
+      console.log((new Date()).toLocaleString('en-GB') + ' New Relic Metric Log: %d', res.statusCode);
+      if (body) {
+        console.log((new Date()).toLocaleString('en-GB') + ' Response from NR Log: ' + body);
+      }
+      callback && callback(null);
+    } else {
+      console.log((new Date()).toLocaleString('en-GB'));
+      console.log('*** ERROR ***');
+      console.log('*** logClient.send ***');
+      console.log(err);
+      callback && callback(err);
+    }
+  });
 }
 
 console.log((new Date()).toLocaleString('en-GB') + ' Starting PM2 Plugin version: ' + ver);

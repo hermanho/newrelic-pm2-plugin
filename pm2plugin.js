@@ -190,6 +190,7 @@ function postToNewRelicMetric (metrics, conf, callback) {
 /**
  *
  * @param {'info' | 'error'} logType
+ * @param {import('./types').PM2_LOG_OUT} message
  * @param {string} callback
  * @returns
  */
@@ -200,7 +201,7 @@ function postToNewRelicLog (logType, message, callback) {
   attributes.pluginVersion = pluginVersion;
   attributes.osName = os.hostname();
 
-  const logMessage = new Log(message, Math.floor(Date.now() / 1000), { logType });
+  const logMessage = new Log(message.data || message, message.at || Math.floor(Date.now() / 1000), { logType, ...message });
   const batch = new LogBatch([logMessage], attributes);
   logClient.send(batch, function (err, res, body) {
     if (!err) {

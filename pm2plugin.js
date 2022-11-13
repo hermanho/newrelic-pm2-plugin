@@ -6,7 +6,8 @@ const { MetricBatch, GaugeMetric, CountMetric, MetricClient } = telemetry.metric
 const { LogBatch, Log, LogClient } = telemetry.logs;
 
 // Version needs to be outside the config file
-const ver = require('./package.json').version;
+const pluginVersion = require('./package.json').version;
+const pluginName = 'newrelic-pm2-plugin';
 const duration = 30;
 // Running restart
 const restartList = {};
@@ -159,7 +160,7 @@ function postToNewRelicMetric (metrics, conf, callback) {
   const attributes = {};
   attributes.host = os.hostname();
   attributes.pid = process.pid;
-  attributes.pluginVersion = ver;
+  attributes.pluginVersion = pluginVersion;
   attributes.osName = os.hostname();
 
   const batch = new MetricBatch(
@@ -177,10 +178,10 @@ function postToNewRelicMetric (metrics, conf, callback) {
       }
       callback && callback(null);
     } else {
-      console.log((new Date()).toLocaleString('en-GB'));
-      console.log('*** ERROR ***');
-      console.log('*** metricClient.send ***');
-      console.log(err);
+      console.error((new Date()).toLocaleString('en-GB'));
+      console.error('*** ERROR ***');
+      console.error('*** metricClient.send ***');
+      console.error(err);
       callback && callback(err);
     }
   });
@@ -196,7 +197,7 @@ function postToNewRelicLog (logType, message, callback) {
   const attributes = {};
   attributes.host = os.hostname();
   attributes.pid = process.pid;
-  attributes.pluginVersion = ver;
+  attributes.pluginVersion = pluginVersion;
   attributes.osName = os.hostname();
 
   const logMessage = new Log(message, Math.floor(Date.now() / 1000), { logType });
@@ -209,16 +210,16 @@ function postToNewRelicLog (logType, message, callback) {
       }
       callback && callback(null);
     } else {
-      console.log((new Date()).toLocaleString('en-GB'));
-      console.log('*** ERROR ***');
-      console.log('*** logClient.send ***');
-      console.log(err);
+      console.error((new Date()).toLocaleString('en-GB'));
+      console.error('*** ERROR ***');
+      console.error('*** logClient.send ***');
+      console.error(err);
       callback && callback(err);
     }
   });
 }
 
-console.log((new Date()).toLocaleString('en-GB') + ' Starting PM2 Plugin version: ' + ver);
+console.log((new Date()).toLocaleString('en-GB') + ' Starting PM2 Plugin version: ' + pluginVersion);
 pmx.initModule({}, function (_err, conf) {
   conf = conf.module_conf;
   if (!conf.nrlicense) {
@@ -228,24 +229,29 @@ pmx.initModule({}, function (_err, conf) {
     apiKey: conf.nrlicense,
     host: conf.eu ? 'metric-api.eu.newrelic.com' : null
   });
-  metricClient.addVersionInfo('newrelic-pm2-plugin', ver);
+  metricClient.addVersionInfo(pluginName, pluginVersion);
   poll(conf);
 
   logClient = new LogClient({
     apiKey: conf.nrlicense,
     host: conf.eu ? 'log-api.eu.newrelic.com' : null
   });
-  pm2.Client.launchBus(function (err, bus) {
-    if (err) return console.error('PM2 Loggly:', err);
+  pm2.launchBus(function (err, bus) {
+    console.log((new Date()).toLocaleString('en-GB') + ' Bus lanuched');
+
+    if (err) {
+      console.error('PM2 Loggly:', err);
+      return;
+    }
 
     bus.on('log:out', function (log) {
-      if (log.process.name !== 'pm2-gelf') {
+      if (log.process.name !== pluginName) {
         postToNewRelicLog('info', log);
       }
     });
 
     bus.on('log:err', function (log) {
-      if (log.process.name !== 'pm2-gelf') {
+      if (log.process.name !== pluginName) {
         postToNewRelicLog('error', log);
       }
     });

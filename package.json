@@ -1,5 +1,5 @@
 {
-  "name": "@hermanho/newrelic-pm2-plugin",
+  "name": "newrelic-pm2-plugin",
   "version": "2.2.0",
   "description": "New Relic plugin to pull in data from PM2",
   "main": "pm2plugin.js",
